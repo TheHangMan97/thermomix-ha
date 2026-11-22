@@ -1,14 +1,7 @@
 """Firebase Cloud Messaging receiver for Thermomix cook-state pushes.
 
-The remote-monitoring backend has no endpoint that returns the current cook
-state: the appliance pushes it to the Cookidoo mobile app as an FCM *data
-message*. To observe it we obtain an FCM registration token of our own (via
-``firebase-messaging``), register it with Cookidoo (``register_push_token``,
-available in cookidoo-api >= 0.18.4) and decode every incoming message.
-
-This mirrors ``cookidoo_api.remote_monitoring`` from cookidoo-api 0.19, which
-the core Cookidoo integration's pinned release does not ship yet; keeping it
-here lets both integrations share one installed library version.
+Thermomix HA v0.1.1 with locally scoped FCM decoder compatibility fix.
+This file replaces only custom_components/thermomix/receiver.py.
 """
 
 from __future__ import annotations
@@ -26,21 +19,14 @@ from firebase_messaging import FcmPushClient, FcmRegisterConfig
 
 _LOGGER = logging.getLogger(__name__)
 
-# Firebase project of the Cookidoo Android app (com.vorwerk.cookidoo). These are
-# the public client identifiers shipped in the APK's google-services resources;
-# appliance pushes are addressed to tokens registered under this project.
+# Public Cookidoo Android application client identifiers.
 FCM_PROJECT_ID = "cookidoo-app"
 FCM_APP_ID = "1:447648593759:android:ebfbf2b01378844b"
 FCM_API_KEY = "AIzaSyCPyZm8EAdpVhWhNLFv3cOw_Kx4iNxR_E4"
 FCM_SENDER_ID = "447648593759"
 
-# Google's register3 endpoint rejects a fresh check-in with
-# PHONE_REGISTRATION_ERROR more often than not; retry a few times.
 FCM_CHECKIN_ATTEMPTS = 4
 FCM_CHECKIN_RETRY_DELAY_S = 2
-
-# The appliance flattens the cook state into the data map, but the app's push
-# service also accepts it nested under these keys (object or JSON string).
 PUSH_NESTED_PAYLOAD_KEYS = ("cookingActivity", "remoteMonitoringInfo")
 
 PushCallback = Callable[[CookidooCookingActivity, dict[str, Any]], None]
@@ -84,11 +70,74 @@ async def _close_register(client: FcmPushClient) -> None:
         await register.close()
 
 
+# NOTE: This subclass changes behavior ONLY for the Thermomix receiver.
+# It never modifies firebase_messaging or the behavior of other integrations.
+# Inspired by the unmerged upstream fixes:
+# https://github.com/sdb9696/firebase-messaging/pull/37
+# https://github.com/sdb9696/firebase-messaging/pull/43
+class _ThermomixResilientFcmPushClient(FcmPushClient):
+    """Decode stripped-padding and multi-parameter FCM Web Push headers.
+
+    Keep listening if a single message is not decryptable. The fix is limited
+    to this local subclass, compatible with firebase-messaging 0.4.x.
+    """
+
+    @staticmethod
+    def _webpush_param(header: str, name: str) -> str:
+        """Find dh/salt even when the header contains multiple parameters."""
+        for segment in header.split(";"):
+            param, sep, value = segment.strip().partition("=")
+            if sep and param.strip().lower() == name:
+                return value.strip()
+        # Bare base64url value: '=' can occur only at the very end as padding.
+        bare = header.strip()
+        if ";" not in bare and "=" not in bare.rstrip("="):
+            return bare
+        raise ValueError(f"FCM Web Push header missing {name!r} parameter")
+
+    def _app_data_by_key(self, p: Any, key: str, do_not_raise: bool = False) -> str:
+        value = super()._app_data_by_key(p, key, do_not_raise)
+        if not value:
+            return value
+        # firebase-messaging 0.4.x slices off precisely the first 3 or 5
+        # characters ('dh=' and 'salt='). Normalize without patching it.
+        if key == "crypto-key":
+            return "dh=" + self._webpush_param(value, "dh")
+        if key == "encryption":
+            return "salt=" + self._webpush_param(value, "salt")
+        return value
+
+    @staticmethod
+    def _decrypt_raw_data(
+        credentials: dict[str, dict[str, str]],
+        crypto_key_str: str,
+        salt_str: str,
+        raw_data: bytes,
+    ) -> bytes:
+        """Restore RFC base64url padding for DH key and salt."""
+        def padded(value: str) -> str:
+            return value + "=" * (-len(value) % 4)
+
+        return FcmPushClient._decrypt_raw_data(
+            credentials, padded(crypto_key_str), padded(salt_str), raw_data
+        )
+
+    def _handle_data_message(self, msg: Any) -> None:
+        try:
+            super()._handle_data_message(msg)
+        except (ValueError, TypeError, KeyError, RuntimeError) as exc:
+            # Never print raw payload, crypto material, or personal data.
+            _LOGGER.warning(
+                "Skipping undecodable Thermomix FCM message (%s); "
+                "the push receiver remains running",
+                type(exc).__name__,
+            )
+
+
 class ThermomixPushReceiver:
     """Receives live cook state for the appliances of a Cookidoo account.
 
-    The FCM credentials are worth persisting: reusing them keeps the same push
-    token across restarts instead of leaving a new one registered every time.
+    Reuse persisted FCM credentials so the push token survives restarts.
     """
 
     def __init__(
@@ -101,7 +150,6 @@ class ThermomixPushReceiver:
         credentials: dict[str, Any] | None = None,
         on_credentials: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
-        """Initialise the receiver."""
         self._cookidoo = cookidoo
         self._on_push = on_push
         self._mobile_app_id = mobile_app_id
@@ -115,27 +163,19 @@ class ThermomixPushReceiver:
 
     @property
     def credentials(self) -> dict[str, Any] | None:
-        """The current FCM credentials, for persistence."""
         return self._credentials
 
     @property
     def token(self) -> str | None:
-        """The current FCM registration token. ``None`` until started."""
         return self._token
 
     @property
     def is_connected(self) -> bool:
-        """Whether the receiver is logged in and able to receive pushes."""
         return self._client is not None and self._client.is_started()
 
     async def start(self) -> None:
-        """Connect to FCM and register the token for cook-state pushes.
-
-        Raises CookidooAuthException / CookidooRequestException /
-        CookidooParseException from the registration, RuntimeError when the
-        Firebase check-in keeps failing.
-        """
-        client = FcmPushClient(
+        """Connect to FCM and register the token for cook-state pushes."""
+        client = _ThermomixResilientFcmPushClient(
             self._handle_message,
             FcmRegisterConfig(
                 project_id=FCM_PROJECT_ID,
@@ -149,7 +189,6 @@ class ThermomixPushReceiver:
         )
         self._token = await self._checkin(client)
         await client.start()
-        # Only now is there something to shut down.
         self._client = client
         await self._register(self._token)
 
@@ -164,14 +203,13 @@ class ThermomixPushReceiver:
         return await client.checkin_or_register()
 
     async def stop(self) -> None:
-        """Stop listening and drop the push token registration."""
         if self._reregister_task is not None:
             self._reregister_task.cancel()
             self._reregister_task = None
         if self._registered_token is not None:
             try:
                 await self._cookidoo.unregister_push_token(self._registered_token)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 _LOGGER.debug("Unregistering the push token failed", exc_info=True)
             self._registered_token = None
         if self._client is not None:
@@ -197,7 +235,6 @@ class ThermomixPushReceiver:
         self._on_push(activity, dict(payload))
 
     def _handle_credentials(self, credentials: dict[str, Any]) -> None:
-        """Persist rotated FCM credentials and re-register a rotated token."""
         self._credentials = credentials
         if self._on_credentials is not None:
             self._on_credentials(credentials)
@@ -209,6 +246,6 @@ class ThermomixPushReceiver:
     async def _async_reregister(self, token: str) -> None:
         try:
             await self._register(token)
-        except Exception:  # noqa: BLE001
+        except Exception:
             _LOGGER.warning("Re-registering the rotated Thermomix push token failed")
             _LOGGER.debug("Re-registration traceback", exc_info=True)

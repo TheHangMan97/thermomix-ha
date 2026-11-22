@@ -71,16 +71,34 @@ type ThermomixConfigEntry = ConfigEntry[ThermomixMonitor]
 
 
 def parse_push_timestamp(value: object) -> datetime | None:
-    """Parse a push timestamp (epoch milliseconds or ISO 8601) to UTC."""
+    """Parse a push timestamp (epoch seconds/milliseconds or ISO 8601) to UTC.
+
+    The TM7 sends epoch *seconds* as strings (e.g. "1795347276"); older
+    payloads used milliseconds. Values above 1e12 are treated as millis.
+    """
     if value is None:
         return None
     text = str(value).strip()
     if not text:
         return None
     if text.isdigit():
-        return dt_util.utc_from_timestamp(int(text) / 1000)
+        number = int(text)
+        return dt_util.utc_from_timestamp(number / 1000 if number > 1e12 else number)
     parsed = dt_util.parse_datetime(text)
     return dt_util.as_utc(parsed) if parsed is not None else None
+
+
+def parse_temperature(value: object) -> float | None:
+    """Parse a display temperature like "95°", "37 °C" or "---"."""
+    if value is None:
+        return None
+    text = str(value).replace("°", "").replace("C", "").replace(",", ".").strip()
+    if not text or set(text) <= {"-", "–", "—"}:
+        return None
+    try:
+        return float(text)
+    except ValueError:
+        return None
 
 
 def parse_step(step: str | None) -> tuple[int | None, int | None]:
@@ -188,14 +206,19 @@ class ThermomixDeviceState:
         """Current temperature, None when the appliance reports none."""
         if not self.visible or self.activity is None:
             return None
-        return self.activity.current_temperature
+        if self.activity.current_temperature is not None:
+            return self.activity.current_temperature
+        # cookidoo-api cannot parse "95°" (degree sign) -> fall back to raw.
+        return parse_temperature(self.raw.get("primaryInfo"))
 
     @property
     def target_temperature(self) -> float | None:
         """Target temperature."""
         if not self.visible or self.activity is None:
             return None
-        return self.activity.target_temperature
+        if self.activity.target_temperature is not None:
+            return self.activity.target_temperature
+        return parse_temperature(self.raw.get("secondaryInfo"))
 
     @property
     def message_title(self) -> str | None:
@@ -587,6 +610,11 @@ class ThermomixMonitor:
     def _mark_stale(self, device_id: str, _now: datetime) -> None:
         device = self.devices.get(device_id)
         if device is None or not device.visible or device.state == STATE_STALE:
+            return
+        if device.state in (STATE_DONE, STATE_ACKNOWLEDGED):
+            # A finished cook that goes stale is over: clear it instead of
+            # leaving "stale" + the old recipe until the next cook starts.
+            self._dismiss(device_id, _now)
             return
         _LOGGER.debug("Cook state of %s is stale", device_id)
         device.override = STATE_STALE

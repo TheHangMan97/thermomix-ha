@@ -18,7 +18,11 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import Event, HomeAssistant
 
 from custom_components.thermomix.const import EVENT_COOKING_UPDATE
-from custom_components.thermomix.monitor import parse_push_timestamp, parse_step
+from custom_components.thermomix.monitor import (
+    parse_push_timestamp,
+    parse_step,
+    parse_temperature,
+)
 
 from .conftest import DEVICE_ID, PUSH_RUNNING
 
@@ -44,6 +48,17 @@ def test_parse_helpers() -> None:
     assert parse_push_timestamp("1787924895000").isoformat() == "2026-08-28T13:48:15+00:00"
     assert parse_push_timestamp("2026-08-28T13:37:48Z").isoformat() == "2026-08-28T13:37:48+00:00"
     assert parse_push_timestamp(None) is None
+    # The TM7 sends epoch seconds (seen live on a TM7, Nov 2026).
+    assert parse_push_timestamp("1795347276").isoformat() == "2026-11-22T11:34:36+00:00"
+
+
+def test_parse_temperature() -> None:
+    """Display temperatures carry a degree sign or "---"."""
+    assert parse_temperature("95°") == 95.0
+    assert parse_temperature("37 °C") == 37.0
+    assert parse_temperature("100") == 100.0
+    assert parse_temperature("---") is None
+    assert parse_temperature(None) is None
 
 
 async def test_setup_creates_idle_entities(
