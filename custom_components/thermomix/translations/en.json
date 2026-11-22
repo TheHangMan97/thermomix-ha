@@ -87,6 +87,9 @@
       "message": {
         "name": "Message"
       },
+      "progress": {
+        "name": "Recipe progress"
+      },
       "recipe": {
         "name": "Recipe"
       },

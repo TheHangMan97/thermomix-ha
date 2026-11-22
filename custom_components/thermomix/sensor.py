@@ -12,7 +12,12 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorEntityDescription,
 )
-from homeassistant.const import EntityCategory, UnitOfTemperature, UnitOfTime
+from homeassistant.const import (
+    PERCENTAGE,
+    EntityCategory,
+    UnitOfTemperature,
+    UnitOfTime,
+)
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -23,6 +28,16 @@ from .entity import ThermomixEntity
 from .monitor import ThermomixConfigEntry, ThermomixDeviceState, ThermomixMonitor
 
 PARALLEL_UPDATES = 0
+
+# HA rejects states longer than 255 characters.
+MAX_STATE_LENGTH = 255
+
+
+def _truncate(value: str | None) -> str | None:
+    """Keep long appliance messages within HA's state length limit."""
+    if value is None or len(value) <= MAX_STATE_LENGTH:
+        return value
+    return value[: MAX_STATE_LENGTH - 1] + "…"
 
 
 @dataclass(kw_only=True, frozen=True)
@@ -56,6 +71,7 @@ SENSORS: tuple[ThermomixSensorDescription, ...] = (
         attributes_fn=lambda d: {
             "recipe_id": d.recipe_id,
             "recipe_type": d.recipe_type,
+            "icon_id": d.icon_id,
         },
     ),
     ThermomixSensorDescription(
@@ -66,6 +82,12 @@ SENSORS: tuple[ThermomixSensorDescription, ...] = (
             "step_number": d.step_number,
             "step_total": d.step_total,
         },
+    ),
+    ThermomixSensorDescription(
+        key="progress",
+        translation_key="progress",
+        native_unit_of_measurement=PERCENTAGE,
+        value_fn=lambda d: d.progress,
     ),
     ThermomixSensorDescription(
         key="remaining_time",
@@ -100,7 +122,7 @@ SENSORS: tuple[ThermomixSensorDescription, ...] = (
     ThermomixSensorDescription(
         key="message",
         translation_key="message",
-        value_fn=lambda d: d.message_body or d.message_title,
+        value_fn=lambda d: _truncate(d.message_body or d.message_title),
         attributes_fn=lambda d: {
             "title": d.message_title,
             "body": d.message_body,

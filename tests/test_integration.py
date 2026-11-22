@@ -52,6 +52,35 @@ def test_parse_helpers() -> None:
     assert parse_push_timestamp("1795347276").isoformat() == "2026-11-22T11:34:36+00:00"
 
 
+async def test_manual_mode_push(
+    hass: HomeAssistant,
+    config_entry: MockConfigEntry,
+    mock_cookidoo: MagicMock,
+    mock_receiver: MagicMock,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Manual mode (no steps, "95°") as sent by a real TM7."""
+    freezer.move_to("2026-08-28T13:30:00Z")
+    await _setup(hass, config_entry)
+
+    _push(
+        mock_receiver,
+        {
+            **PUSH_RUNNING,
+            "leadingText": "Manuelle Einstellungen",
+            "trailingText": "",
+            "primaryInfo": "95°",
+            "secondaryInfo": "100",
+        },
+    )
+    await hass.async_block_till_done()
+
+    assert hass.states.get("sensor.thermomix_tm7_current_step").state == "unknown"
+    assert hass.states.get("sensor.thermomix_tm7_recipe_progress").state == "unknown"
+    assert hass.states.get("sensor.thermomix_tm7_current_temperature").state == "95.0"
+    assert hass.states.get("sensor.thermomix_tm7_target_temperature").state == "100.0"
+
+
 def test_parse_temperature() -> None:
     """Display temperatures carry a degree sign or "---"."""
     assert parse_temperature("95°") == 95.0
@@ -122,6 +151,10 @@ async def test_push_updates_entities_and_fires_events(
     assert remaining.attributes["unit_of_measurement"] == "min"
     assert float(remaining.state) == pytest.approx(7.8)
     assert hass.states.get("binary_sensor.thermomix_tm7_cooking").state == "on"
+    assert hass.states.get("sensor.thermomix_tm7_recipe_progress").state == "56"
+    assert hass.states.get("sensor.thermomix_tm7_recipe").attributes[
+        "icon_id"
+    ] == "manual-values"
 
     event = hass.states.get("event.thermomix_tm7_cooking_event")
     assert event.attributes["event_type"] == "started"

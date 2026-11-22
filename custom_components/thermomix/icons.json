@@ -1,0 +1,57 @@
+{
+  "entity": {
+    "binary_sensor": {
+      "connected": {
+        "default": "mdi:cloud-check-outline",
+        "state": {
+          "off": "mdi:cloud-off-outline"
+        }
+      },
+      "cooking": {
+        "default": "mdi:pot-steam",
+        "state": {
+          "off": "mdi:pot-outline"
+        }
+      }
+    },
+    "event": {
+      "cooking": {
+        "default": "mdi:chef-hat"
+      }
+    },
+    "sensor": {
+      "finish_time": {
+        "default": "mdi:timer-check-outline"
+      },
+      "last_update": {
+        "default": "mdi:update"
+      },
+      "message": {
+        "default": "mdi:message-alert-outline"
+      },
+      "progress": {
+        "default": "mdi:progress-check"
+      },
+      "recipe": {
+        "default": "mdi:book-open-variant"
+      },
+      "remaining_time": {
+        "default": "mdi:timer-sand"
+      },
+      "state": {
+        "default": "mdi:pot-outline",
+        "state": {
+          "acknowledged": "mdi:check-circle-outline",
+          "done": "mdi:bell-ring-outline",
+          "idle": "mdi:pot-outline",
+          "paused": "mdi:pause-circle-outline",
+          "running": "mdi:pot-steam",
+          "stale": "mdi:clock-alert-outline"
+        }
+      },
+      "step": {
+        "default": "mdi:format-list-numbered"
+      }
+    }
+  }
+}

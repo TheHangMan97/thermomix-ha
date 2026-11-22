@@ -69,11 +69,14 @@ pause, finish and messages, so very short steps may not show up.
 
 ## Entities
 
+Entity names and states are translated (English, German).
+
 Per appliance:
 
 * `sensor` Cooking state (`idle`, `running`, `paused`, `done`, `acknowledged`, `stale`)
-* `sensor` Recipe (attributes: `recipe_id`, `recipe_type`)
+* `sensor` Recipe (attributes: `recipe_id`, `recipe_type`, `icon_id`)
 * `sensor` Current step (attributes: `step_number`, `step_total`)
+* `sensor` Recipe progress in % (guided recipes only)
 * `sensor` Remaining time, Step finish time
 * `sensor` Current temperature, Target temperature
 * `sensor` Message (attributes: `title`, `body`, `criticality`)

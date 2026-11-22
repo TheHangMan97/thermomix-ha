@@ -1,0 +1,118 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "Dieses Cookidoo-Konto ist bereits eingerichtet",
+      "reauth_successful": "Die erneute Anmeldung war erfolgreich",
+      "unique_id_mismatch": "Das Konto stimmt nicht mit dem ursprünglich eingerichteten Konto überein"
+    },
+    "error": {
+      "cannot_connect": "Verbindung zu Cookidoo fehlgeschlagen",
+      "invalid_auth": "E-Mail-Adresse oder Passwort ungültig",
+      "unknown": "Unerwarteter Fehler"
+    },
+    "step": {
+      "language": {
+        "data": {
+          "language": "Sprache"
+        },
+        "data_description": {
+          "language": "Sprache deiner Cookidoo-Inhalte."
+        },
+        "title": "Thermomix einrichten"
+      },
+      "reauth_confirm": {
+        "data": {
+          "email": "E-Mail-Adresse",
+          "password": "Passwort"
+        },
+        "description": "Melde dich erneut bei Cookidoo an, damit der Thermomix-Status weiter empfangen wird.",
+        "title": "Erneut bei Cookidoo anmelden"
+      },
+      "user": {
+        "data": {
+          "country": "Land",
+          "email": "E-Mail-Adresse",
+          "password": "Passwort"
+        },
+        "data_description": {
+          "country": "Land deines Cookidoo-Kontos.",
+          "email": "E-Mail-Adresse des Cookidoo-Kontos, mit dem dein Thermomix verbunden ist.",
+          "password": "Passwort dieses Cookidoo-Kontos."
+        },
+        "description": "Am Thermomix muss die Fernüberwachung aktiviert sein (Einstellungen → Fernüberwachung), damit Kochupdates ankommen.",
+        "title": "Thermomix einrichten"
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "connected": {
+        "name": "Push-Verbindung"
+      },
+      "cooking": {
+        "name": "Kocht"
+      }
+    },
+    "event": {
+      "cooking": {
+        "name": "Kochereignis",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "acknowledged": "Bestätigt",
+              "cleared": "Zurückgesetzt",
+              "done": "Fertig",
+              "message": "Meldung",
+              "paused": "Pausiert",
+              "resumed": "Fortgesetzt",
+              "stale": "Veraltet",
+              "started": "Gestartet",
+              "step_changed": "Schritt gewechselt",
+              "updated": "Aktualisiert"
+            }
+          }
+        }
+      }
+    },
+    "sensor": {
+      "current_temperature": {
+        "name": "Aktuelle Temperatur"
+      },
+      "finish_time": {
+        "name": "Schritt fertig um"
+      },
+      "last_update": {
+        "name": "Letzte Aktualisierung"
+      },
+      "message": {
+        "name": "Meldung"
+      },
+      "progress": {
+        "name": "Rezeptfortschritt"
+      },
+      "recipe": {
+        "name": "Rezept"
+      },
+      "remaining_time": {
+        "name": "Restzeit"
+      },
+      "state": {
+        "name": "Kochstatus",
+        "state": {
+          "acknowledged": "Bestätigt",
+          "done": "Fertig",
+          "idle": "Bereit",
+          "paused": "Pausiert",
+          "running": "Läuft",
+          "stale": "Veraltet"
+        }
+      },
+      "step": {
+        "name": "Aktueller Schritt"
+      },
+      "target_temperature": {
+        "name": "Zieltemperatur"
+      }
+    }
+  }
+}

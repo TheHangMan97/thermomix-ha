@@ -166,8 +166,11 @@ class ThermomixDeviceState:
 
     @property
     def step(self) -> str | None:
-        """Guided-cooking step indicator, e.g. "5/9"."""
-        return self.activity.step if self.visible and self.activity else None
+        """Guided-cooking step indicator, e.g. "5/9" (None in manual mode)."""
+        if not self.visible or self.activity is None:
+            return None
+        # Manual mode sends trailingText "" -> show unknown, not an empty state.
+        return self.activity.step or None
 
     @property
     def step_number(self) -> int | None:
@@ -185,6 +188,22 @@ class ThermomixDeviceState:
         if not self.is_active or self.activity is None:
             return None
         return self.activity.completed_at
+
+    @property
+    def progress(self) -> int | None:
+        """Guided-recipe progress in percent, derived from the step indicator."""
+        number, total = self.step_number, self.step_total
+        if number is None or not total:
+            return None
+        return max(0, min(100, round(number / total * 100)))
+
+    @property
+    def icon_id(self) -> str | None:
+        """Icon id of the push (e.g. "manual-values" in manual mode)."""
+        if not self.visible:
+            return None
+        value = self.raw.get("iconId")
+        return str(value) if value else None
 
     @property
     def remaining_seconds(self) -> int | None:
@@ -257,6 +276,8 @@ class ThermomixDeviceState:
             "step": self.step,
             "step_number": self.step_number,
             "step_total": self.step_total,
+            "progress": self.progress,
+            "icon_id": self.icon_id,
             "remaining_seconds": self.remaining_seconds,
             "is_time_estimated": self.is_time_estimated,
             "finish_at": self.finish_at.isoformat() if self.finish_at else None,
